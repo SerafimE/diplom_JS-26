@@ -1,5 +1,4 @@
 'use strict';
-const z = console.log; // для отладки
 
 class Vector {
     constructor(x = 0, y = 0) {
