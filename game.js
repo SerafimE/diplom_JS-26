@@ -70,28 +70,14 @@ class Actor {
 }
 
 class Level {
-    constructor(grid = [], actors = []) {
+    constructor(grid, actors = []) {
         this.grid = grid;
         this.actors = actors;
-
-        if (this.actors) {
-            this.player = this.actors.find(elem => {
-                if (elem.type === 'player') {
-                    return elem;
-                }
-            });
-        }
-
+        this.player = actors.find((actor) => (actor.type === 'player'));
+        this.height = (grid) ? grid.length : 0;
+        this.width = (grid) ? Math.max(...(grid.map((line) => (line.length)))) : 0;
         this.status = null;
         this.finishDelay = 1;
-
-        if (this.grid.length) {
-            this.height = this.grid.length;
-            this.width = Math.max.apply(null, this.grid.map(item => item.length));
-        } else {
-            this.width = 0;
-            this.height = 0;
-        }
     }
 
     isFinished() {
@@ -99,11 +85,10 @@ class Level {
     }
 
     actorAt(actorObj) {
-        if (actorObj instanceof Actor) {
-            return this.actors.find(elem => elem.isIntersect(actorObj));
-        } else {
+        if ((!(actorObj instanceof Actor)) || (actorObj === undefined)) {
             throw new Error('not Actor');
         }
+        return this.actors.find(elem => elem.isIntersect(actorObj));
     }
 
     obstacleAt(position, size) {
@@ -133,37 +118,22 @@ class Level {
     }
 
     removeActor(actorObj) {
-        if (this.actors.indexOf(actorObj) !== -1) {
-            this.actors.findIndex((elem, index, array) => {
-                if (elem === actorObj) {
-                    array.splice(index, 1);
-                }
-            });
-        }
+        this.actors.splice(this.actors.findIndex((obj) => (obj === actorObj)), 1);
     }
 
     noMoreActors(typeObj) {
-        if (this.actors.length === 0) {
-            return true;
-        }
-        if (this.actors.find(elem => elem.type === typeObj)) {
-            return false;
-        } else {
-            return true;
-        }
+        return !(this.actors.find((actor) => (actor.type === typeObj)));
     }
 
     playerTouched(type, obj) {
-        if (this.status !== 'null') {
-            if (type === 'lava' ||
-                type === 'fireball') {
-                this.status = 'lost';
-            } else if (type === 'coin' && obj) {
-                this.removeActor(obj);
-                if (this.noMoreActors('coin')) {
-                    this.status = 'won';
-                }
-            }
+        if (!(this.status === null)) {
+            return;
+        }
+        if ((type === 'lava') || (type === 'fireball')) {
+            this.status = 'lost';
+        } else if (type === 'coin') {
+            this.removeActor(obj);
+            this.noMoreActors(type) ? this.status = 'won' : '';
         }
     }
 }
@@ -180,8 +150,6 @@ class LevelParser {
             } else {
                 return undefined;
             }
-        } else {
-            return undefined;
         }
     }
 
@@ -237,5 +205,115 @@ class LevelParser {
         const gridObj = this.createGrid(arrayStr),
             gridAct = this.createActors(arrayStr);
         return new Level(gridObj, gridAct);
+    }
+}
+
+class Fireball extends Actor {
+    constructor(
+        pos = new Vector(0, 0),
+        speed = new Vector(0, 0)) {
+        super(pos);
+        this.speed = speed;
+        this.size = new Vector(1, 1);
+    }
+
+    get type() {
+        return 'fireball';
+    }
+
+    getNextPosition(time = 1) {
+        let newPos = new Vector(this.pos.x, this.pos.y);
+        return newPos.plus(this.speed.times(time));
+    }
+
+    handleObstacle() {
+        this.speed = this.speed.times(-1);
+    }
+
+    act(time, playField) {
+        const nextPosition = this.getNextPosition(time);
+        if (!playField.obstacleAt(nextPosition, this.size)) {
+            this.pos = nextPosition;
+        } else {
+            this.handleObstacle();
+        }
+    }
+}
+
+class HorizontalFireball extends Fireball {
+    constructor(pos) {
+        super(pos);
+        this.size = new Vector(1, 1);
+        this.speed = new Vector(2, 0);
+    }
+}
+
+class VerticalFireball extends Fireball {
+    constructor(pos) {
+        super(pos);
+        this.size = new Vector(1, 1);
+        this.speed = new Vector(0, 2);
+    }
+}
+
+class FireRain extends Fireball {
+    constructor(pos) {
+        super(pos);
+        this.startPos = pos;
+        this.size = new Vector(1, 1);
+        this.speed = new Vector(0, 3);
+    }
+
+    handleObstacle() {
+        this.pos = this.startPos;
+    }
+}
+
+class Coin extends Actor {
+    constructor(pos) {
+        super(pos);
+        this.basePos = this.pos;
+        this.pos = this.pos.plus(new Vector(0.2, 0.1));
+        this.size = new Vector(0.6, 0.6);
+        this.springSpeed = 8;
+        this.springDist = 0.07;
+        this.spring = Math.random() * Math.PI * 2;
+    }
+
+    get type() {
+        return 'coin';
+    }
+
+    updateSpring(time = 1) {
+        this.spring += this.springSpeed * time;
+    }
+
+    getSpringVector() {
+        return new Vector(0, this.springDist * Math.sin(this.spring));
+    }
+
+    getNextPosition(time = 1) {
+        this.updateSpring(time);
+        return this.basePos
+            .plus(this.getSpringVector())
+            .plus(new Vector(0.2, 0.1));
+    }
+
+    act(time) {
+        this.pos = this.getNextPosition(time);
+    }
+}
+
+class Player extends Actor {
+    constructor(pos) {
+        super(pos);
+        this.basePos = this.pos;
+        this.pos = this.pos.plus(new Vector(0, -0.5));
+        this.size = new Vector(0.8, 1.5);
+        this.speed = new Vector(0, 0);
+    }
+
+    get type() {
+        return 'player';
     }
 }
